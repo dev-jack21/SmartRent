@@ -1,0 +1,2 @@
+[functions.send-rent-reminders]
+verify_jwt = false
