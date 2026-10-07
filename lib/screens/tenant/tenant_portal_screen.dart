@@ -103,6 +103,11 @@ class _TenantPortalScreenState extends State<TenantPortalScreen> {
             icon: const Icon(Icons.notifications_outlined),
           ),
           IconButton(
+            tooltip: 'Refresh Portal',
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
             tooltip: 'My Profile',
             onPressed: () {
               Navigator.push(
@@ -113,6 +118,11 @@ class _TenantPortalScreenState extends State<TenantPortalScreen> {
               );
             },
             icon: const Icon(Icons.account_circle_outlined),
+          ),
+          IconButton(
+            tooltip: 'Log out',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
           ),
         ],
       ),

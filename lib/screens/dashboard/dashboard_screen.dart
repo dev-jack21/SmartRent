@@ -9,11 +9,14 @@ import '../../services/overdue_rent_follow_up.dart';
 import '../../services/rent_credit_ledger.dart';
 import '../../services/tenant_communication_service.dart';
 import '../../widgets/digital_payment_dialog.dart';
+import '../ai/ai_assistant_screen.dart';
+import '../analytics/financial_analytics_screen.dart';
 import '../announcements/announcements_screen.dart';
 import '../auth/login_screen.dart';
 import '../caretaker/caretaker_dashboard_screen.dart';
 import '../chat/chat_screen.dart';
 import '../documents/manage_property_documents_screen.dart';
+import '../emergency/emergency_alert_screen.dart';
 import '../inspection/property_inspection_screen.dart';
 import '../lease/digital_lease_screen.dart';
 import '../vacancy/vacancy_management_screen.dart';
@@ -1316,6 +1319,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildOccupancySummaryCard() {
+    final colors = Theme.of(context).colorScheme;
+    final total = _properties.length;
+    final occupied = _properties.where((p) => (p['tenant_name']?.toString().trim().isNotEmpty ?? false)).length;
+    final vacant = total - occupied;
+    final pct = total == 0 ? 0.0 : (occupied / total);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Building Occupancy Rate',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Chip(
+                  avatar: const Icon(Icons.pie_chart_outline, size: 16),
+                  label: Text('${(pct * 100).toStringAsFixed(0)}% Occupied'),
+                  backgroundColor: colors.primaryContainer,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 8,
+                color: colors.primary,
+                backgroundColor: colors.surfaceContainerHighest,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 16, color: colors.primary),
+                      const SizedBox(width: 6),
+                      Text('$occupied Occupied', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.house_outlined, size: 16, color: colors.error),
+                      const SizedBox(width: 6),
+                      Text('$vacant Vacant', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -1398,6 +1467,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
 
           if (_properties.isNotEmpty) ...[
+            _buildOccupancySummaryCard(),
+            const SizedBox(height: 12),
             _buildOverdueFollowUpCard(),
             const SizedBox(height: 16),
           ],
@@ -1834,28 +1905,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.account_circle_outlined),
           ),
           IconButton(
-            tooltip: 'Tenants Directory',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => TenantDirectoryScreen(properties: _properties),
-                ),
-              );
-            },
-            icon: const Icon(Icons.people_outline),
-          ),
-          IconButton(
-            tooltip: 'Payment tracker',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PaymentTrackerScreen()),
-              );
-            },
-            icon: const Icon(Icons.receipt_long_outlined),
-          ),
-          IconButton(
             tooltip: 'Refresh',
             onPressed: _loadProperties,
             icon: const Icon(Icons.refresh),
@@ -1896,11 +1945,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   context,
                   MaterialPageRoute(builder: (_) => const SecuritySettingsScreen()),
                 );
+              } else if (value == 'analytics') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FinancialAnalyticsScreen()),
+                );
               } else if (value == 'caretaker') {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CaretakerDashboardScreen()),
                 );
+              } else if (value == 'ai_assistant') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AiAssistantScreen(properties: _properties),
+                  ),
+                );
+              } else if (value == 'emergency') {
+                if (_properties.isNotEmpty) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EmergencyAlertScreen(property: _properties.first),
+                    ),
+                  );
+                }
               }
             },
             itemBuilder: (context) {
@@ -1922,12 +1992,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const PopupMenuItem<String>(
+                  value: 'analytics',
+                  child: Row(
+                    children: [
+                      Icon(Icons.analytics_outlined),
+                      SizedBox(width: 10),
+                      Text('Financial Analytics & Tax P&L'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
                   value: 'caretaker',
                   child: Row(
                     children: [
                       Icon(Icons.engineering_outlined),
                       SizedBox(width: 10),
                       Text('Caretaker portal'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'ai_assistant',
+                  child: Row(
+                    children: [
+                      Icon(Icons.smart_toy_outlined),
+                      SizedBox(width: 10),
+                      Text('AI Property Assistant'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'emergency',
+                  child: Row(
+                    children: [
+                      Icon(Icons.report_problem_outlined, color: Colors.red),
+                      SizedBox(width: 10),
+                      Text('Building Emergency Alert', style: TextStyle(color: Colors.red)),
                     ],
                   ),
                 ),

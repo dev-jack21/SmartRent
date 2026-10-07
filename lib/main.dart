@@ -7,6 +7,7 @@ import 'screens/caretaker/caretaker_dashboard_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'services/app_navigation.dart';
 import 'services/notification_service.dart';
+import 'services/theme_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,8 +21,6 @@ Future<void> main() async {
 
   runApp(const RentReminderApp());
 }
-
-import 'services/theme_service.dart';
 
 class RentReminderApp extends StatelessWidget {
   const RentReminderApp({super.key});

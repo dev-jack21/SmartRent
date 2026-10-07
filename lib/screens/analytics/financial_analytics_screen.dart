@@ -44,26 +44,39 @@ class _FinancialAnalyticsScreenState extends State<FinancialAnalyticsScreen> {
     });
 
     try {
-      final results = await Future.wait([
-        _supabase
+      List<Map<String, dynamic>> props = [];
+      List<Map<String, dynamic>> pmts = [];
+      List<Map<String, dynamic>> exps = [];
+
+      try {
+        final propRes = await _supabase
             .from('properties')
-            .select('id, name, monthly_rent, currency, is_vacant')
-            .eq('user_id', user.id),
-        _supabase
+            .select('id, name, monthly_rent, currency, tenant_name, tenant_email')
+            .eq('user_id', user.id);
+        props = List<Map<String, dynamic>>.from(propRes);
+      } catch (_) {}
+
+      try {
+        final pmtRes = await _supabase
             .from('payments')
             .select('property_id, amount, status, payment_date, rent_month')
-            .eq('user_id', user.id),
-        _supabase
+            .eq('user_id', user.id);
+        pmts = List<Map<String, dynamic>>.from(pmtRes);
+      } catch (_) {}
+
+      try {
+        final expRes = await _supabase
             .from('property_expenses')
             .select('property_id, amount, category, expense_date')
-            .eq('user_id', user.id),
-      ]);
+            .eq('user_id', user.id);
+        exps = List<Map<String, dynamic>>.from(expRes);
+      } catch (_) {}
 
       if (!mounted) return;
       setState(() {
-        _properties = List<Map<String, dynamic>>.from(results[0]);
-        _payments = List<Map<String, dynamic>>.from(results[1]);
-        _expenses = List<Map<String, dynamic>>.from(results[2]);
+        _properties = props;
+        _payments = pmts;
+        _expenses = exps;
         _isLoading = false;
       });
     } catch (e) {
@@ -107,6 +120,7 @@ class _FinancialAnalyticsScreenState extends State<FinancialAnalyticsScreen> {
       expenses: _expenses,
       targetMonth: _selectedMonth,
     );
+    final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -214,6 +228,67 @@ class _FinancialAnalyticsScreenState extends State<FinancialAnalyticsScreen> {
                             Text(
                               'Rent Collected: ${_formatCurrency(report.totalRentCollected)}  •  Expenses: ${_formatCurrency(report.totalExpenses)}',
                               style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Visual Revenue & Expense Comparison Bars
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Revenue vs Expense Ratio',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Gross Collected:'),
+                                Text(
+                                  _formatCurrency(report.totalRentCollected),
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800]),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: 1.0,
+                                minHeight: 8,
+                                color: Colors.green[700],
+                                backgroundColor: Colors.green[100],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Operating Expenses:'),
+                                Text(
+                                  _formatCurrency(report.totalExpenses),
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: colors.error),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: report.totalRentCollected > 0
+                                    ? (report.totalExpenses / report.totalRentCollected).clamp(0.0, 1.0)
+                                    : (report.totalExpenses > 0 ? 1.0 : 0.0),
+                                minHeight: 8,
+                                color: colors.error,
+                                backgroundColor: colors.errorContainer,
+                              ),
                             ),
                           ],
                         ),

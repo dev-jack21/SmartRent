@@ -93,7 +93,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             // Property Selection Dropdown
             if (widget.properties.isNotEmpty) ...[
               DropdownButtonFormField<String>(
-                value: _selectedPropertyId,
+                initialValue: _selectedPropertyId,
                 decoration: const InputDecoration(
                   labelText: 'Select Target Property / Unit',
                   border: OutlineInputBorder(),

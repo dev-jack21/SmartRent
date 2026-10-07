@@ -6,7 +6,7 @@ class CommunityMessage {
   final String propertyId;
   final String senderId;
   final String senderName;
-  final String recipientId; // 'group' or target tenant email/id
+  final String recipientId; // 'group', 'caretaker', 'landlord', or peer email/id
   final String message;
   final DateTime createdAt;
 
@@ -63,10 +63,51 @@ class CommunityChatService {
           .eq('property_id', propertyId)
           .eq('recipient_id', 'group')
           .order('created_at', ascending: true)
-          .map((data) => data.map((map) => CommunityMessage.fromMap(map)).toList())
+          .map((data) {
+            final remote = data.map((map) => CommunityMessage.fromMap(map)).toList();
+            if (remote.isNotEmpty) {
+              _localStore[propertyId]?.clear();
+              return remote;
+            }
+            return _localStore[propertyId] ?? [];
+          })
           .handleError((_) => _localStore[propertyId] ?? []);
     } catch (_) {
       return Stream.value(_localStore[propertyId] ?? []);
+    }
+  }
+
+  /// Stream role-based channel messages (Landlord <-> Caretaker <-> Tenant)
+  Stream<List<CommunityMessage>> getRoleMessagesStream({
+    required String propertyId,
+    required String role,
+  }) {
+    try {
+      return _supabase
+          .from('community_messages')
+          .stream(primaryKey: ['id'])
+          .eq('property_id', propertyId)
+          .order('created_at', ascending: true)
+          .map((data) {
+            final all = data.map((map) => CommunityMessage.fromMap(map)).toList();
+            final filtered = all.where((m) {
+              final r = m.recipientId.toLowerCase();
+              final s = m.senderName.toLowerCase();
+              return r == 'caretaker' ||
+                  r == 'landlord' ||
+                  r == 'owner' ||
+                  s.contains('caretaker') ||
+                  s.contains('landlord');
+            }).toList();
+            if (filtered.isNotEmpty) {
+              _localStore['${propertyId}_$role']?.clear();
+              return filtered;
+            }
+            return _localStore['${propertyId}_$role'] ?? [];
+          })
+          .handleError((_) => _localStore['${propertyId}_$role'] ?? []);
+    } catch (_) {
+      return Stream.value(_localStore['${propertyId}_$role'] ?? []);
     }
   }
 
@@ -95,17 +136,17 @@ class CommunityChatService {
     }
   }
 
-  /// Send message (Group or 1-on-1)
+  /// Send message (Group, Role, or 1-on-1)
   Future<CommunityMessage> sendMessage({
     required String propertyId,
-    required String recipientId, // 'group' or peer email/id
+    required String recipientId,
     required String message,
   }) async {
     final user = _supabase.auth.currentUser;
     final userId = user?.id ?? 'tenant_user';
     final userName = user?.userMetadata?['full_name']?.toString() ??
         user?.email ??
-        'Tenant';
+        'User';
 
     final msgId = DateTime.now().millisecondsSinceEpoch.toString();
     final newMsg = CommunityMessage(
@@ -136,9 +177,40 @@ class CommunityChatService {
 
       return CommunityMessage.fromMap(response);
     } catch (e) {
-      // Local fallback
       _localStore.putIfAbsent(propertyId, () => []).add(newMsg);
+      _localStore.putIfAbsent('${propertyId}_$recipientId', () => []).add(newMsg);
       return newMsg;
+    }
+  }
+
+  /// Edit community message
+  Future<bool> editMessage({
+    required String messageId,
+    required String newText,
+  }) async {
+    try {
+      await _supabase
+          .from('community_messages')
+          .update({'message': newText.trim()})
+          .eq('id', messageId);
+      return true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Delete community message
+  Future<bool> deleteMessage({
+    required String messageId,
+  }) async {
+    try {
+      await _supabase
+          .from('community_messages')
+          .delete()
+          .eq('id', messageId);
+      return true;
+    } catch (_) {
+      return true;
     }
   }
 }

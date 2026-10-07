@@ -63,10 +63,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
           return;
         }
 
+        try {
+          await Supabase.instance.client.auth.signInWithPassword(
+            email: email,
+            password: password,
+          );
+          if (!mounted) return;
+          Navigator.of(context, rootNavigator: true)
+              .popUntil((route) => route.isFirst);
+          return;
+        } catch (_) {}
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Account created successfully! Check your email to confirm before signing in.',
+              'Account created! If email confirmation is enabled in Supabase, please check your inbox.',
             ),
           ),
         );

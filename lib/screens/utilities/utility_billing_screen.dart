@@ -124,7 +124,7 @@ class _UtilityBillingScreenState extends State<UtilityBillingScreen> {
     }
   }
 
-  void _showAddBillDialog() {
+  Future<void> _showAddBillDialog() async {
     if (_properties.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add a property before creating utility bills.')),
@@ -159,7 +159,7 @@ class _UtilityBillingScreenState extends State<UtilityBillingScreen> {
     currReadingCtrl.addListener(recalculateTotal);
     rateCtrl.addListener(recalculateTotal);
 
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (dialogCtx) {
         return StatefulBuilder(

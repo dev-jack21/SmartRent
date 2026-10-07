@@ -36,7 +36,7 @@ class _TenantReportIssueDialogState extends State<TenantReportIssueDialog> {
   Future<void> _pickPhoto() async {
     try {
       final pickedFiles = await FilePicker.pickFiles(type: FileType.image);
-      if (pickedFiles != null && pickedFiles.isNotEmpty) {
+      if (pickedFiles.isNotEmpty) {
         final file = pickedFiles.first;
         setState(() {
           _attachedFileName = file.name;

@@ -56,7 +56,6 @@ class ChatService {
 
   static final ChatService instance = ChatService();
 
-  // In-memory message store for offline or pre-migration fallback
   final Map<String, List<ChatMessage>> _localStore = {};
   final StreamController<Map<String, List<ChatMessage>>> _localStreamController =
       StreamController<Map<String, List<ChatMessage>>>.broadcast();
@@ -71,15 +70,13 @@ class ChatService {
           .order('created_at', ascending: true)
           .map((data) {
             final remote = data.map((map) => ChatMessage.fromMap(map)).toList();
-            // Merge with local fallback store
-            final local = _localStore[propertyId] ?? [];
-            final ids = remote.map((m) => m.id).toSet();
-            final combined = [...remote, ...local.where((m) => !ids.contains(m.id))];
-            combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-            return combined;
+            if (remote.isNotEmpty) {
+              _localStore[propertyId]?.clear();
+              return remote;
+            }
+            return _localStore[propertyId] ?? [];
           })
           .handleError((error) {
-            // Return local fallback list if Supabase stream fails or table is missing
             return _localStore[propertyId] ?? [];
           });
     } catch (_) {
@@ -128,10 +125,60 @@ class ChatService {
 
       return ChatMessage.fromMap(response);
     } catch (e) {
-      // Fallback: save to local store so UI updates seamlessly
       _localStore.putIfAbsent(propertyId, () => []).add(newMsg);
       _localStreamController.add(_localStore);
       return newMsg;
+    }
+  }
+
+  /// Edit a message
+  Future<bool> editMessage({
+    required String messageId,
+    required String propertyId,
+    required String newText,
+  }) async {
+    try {
+      await _supabase
+          .from('chat_messages')
+          .update({'message': newText.trim()})
+          .eq('id', messageId);
+      return true;
+    } catch (_) {
+      final list = _localStore[propertyId];
+      if (list != null) {
+        final idx = list.indexWhere((m) => m.id == messageId);
+        if (idx != -1) {
+          final old = list[idx];
+          list[idx] = ChatMessage(
+            id: old.id,
+            propertyId: old.propertyId,
+            senderId: old.senderId,
+            senderEmail: old.senderEmail,
+            senderRole: old.senderRole,
+            message: newText.trim(),
+            createdAt: old.createdAt,
+            isRead: old.isRead,
+          );
+        }
+      }
+      return true;
+    }
+  }
+
+  /// Delete a message
+  Future<bool> deleteMessage({
+    required String messageId,
+    required String propertyId,
+  }) async {
+    try {
+      await _supabase
+          .from('chat_messages')
+          .delete()
+          .eq('id', messageId);
+      return true;
+    } catch (_) {
+      _localStore[propertyId]?.removeWhere((m) => m.id == messageId);
+      return true;
     }
   }
 
@@ -148,8 +195,6 @@ class ChatService {
           .update({'is_read': true})
           .eq('property_id', propertyId)
           .neq('sender_id', user.id);
-    } catch (_) {
-      // Ignore errors if table or policies do not permit
-    }
+    } catch (_) {}
   }
 }

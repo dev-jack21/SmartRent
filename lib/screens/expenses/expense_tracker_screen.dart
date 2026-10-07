@@ -614,8 +614,10 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                 ),
               ),
             )
-          : SafeArea(
-              child: ListView(
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              child: SafeArea(
+                child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
                   Card(
@@ -953,6 +955,7 @@ class _ExpenseTrackerScreenState extends State<ExpenseTrackerScreen> {
                 ],
               ),
             ),
+          ),
     );
   }
 }

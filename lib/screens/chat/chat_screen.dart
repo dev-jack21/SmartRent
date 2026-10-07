@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/chat_service.dart';
 import '../../services/community_chat_service.dart';
@@ -32,6 +33,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final CommunityChatService _communityService = CommunityChatService.instance;
 
   bool _isSending = false;
+  final Set<String> _hiddenMessageIds = {};
+  final Map<String, String> _messageReactions = {};
 
   @override
   void initState() {
@@ -110,6 +113,323 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) setState(() => _isSending = false);
   }
 
+  void _openStickerDrawer(TextEditingController controller) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            height: 280,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Property Quick Emojis & Stickers',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    '👍', '❤️', '😊', '🙏', '🔑', '🏠', '💰', '🛠️', '✅', '⚠️', '👏', '🔥'
+                  ].map((e) {
+                    return InkWell(
+                      onTap: () {
+                        controller.text += e;
+                        Navigator.pop(ctx);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(e, style: const TextStyle(fontSize: 22)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                const Text('Quick Property Stickers',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    'Rent Paid ✅',
+                    'Receipt Shared 🧾',
+                    'Maintenance Needed 🛠️',
+                    'Lease Signed ✍️',
+                    'Thank You! 🙏',
+                  ].map((sticker) {
+                    return ActionChip(
+                      label: Text('[STICKER: $sticker]'),
+                      onPressed: () {
+                        controller.text = '[STICKER: $sticker]';
+                        Navigator.pop(ctx);
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMessageOptions(ChatMessage msg) {
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    final isMe = msg.senderId == currentUser?.id || msg.senderEmail == currentUser?.email;
+    final editCtrl = TextEditingController(text: msg.message);
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              // WhatsApp Quick Reaction Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) {
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _messageReactions[msg.id] = emoji;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.reply_outlined),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _primaryMsgController.text = 'Replying to "${msg.message}": ';
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_outlined),
+                title: const Text('Copy Text'),
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: msg.message));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Message copied to clipboard!')),
+                  );
+                },
+              ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Edit Message'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showDialog(
+                      context: context,
+                      builder: (dlgCtx) => AlertDialog(
+                        title: const Text('Edit Message'),
+                        content: TextField(
+                          controller: editCtrl,
+                          maxLines: 3,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dlgCtx),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () async {
+                              Navigator.pop(dlgCtx);
+                              await _chatService.editMessage(
+                                messageId: msg.id,
+                                propertyId: widget.propertyId,
+                                newText: editCtrl.text.trim(),
+                              );
+                              if (mounted) setState(() {});
+                            },
+                            child: const Text('Save Edit'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_sweep_outlined, color: Colors.orange),
+                title: const Text('Delete for Me'),
+                subtitle: const Text('Remove from your view only'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _hiddenMessageIds.add(msg.id);
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Message deleted for you.')),
+                  );
+                },
+              ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('Delete for Everyone', style: TextStyle(color: Colors.red)),
+                  subtitle: const Text('Permanently delete for all participants'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _chatService.deleteMessage(
+                      messageId: msg.id,
+                      propertyId: widget.propertyId,
+                    );
+                    setState(() {
+                      _hiddenMessageIds.add(msg.id);
+                    });
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCommunityMessageOptions(CommunityMessage msg) {
+    final user = Supabase.instance.client.auth.currentUser;
+    final isMe = msg.senderId == user?.id || msg.senderName == user?.email;
+    final editCtrl = TextEditingController(text: msg.message);
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              // WhatsApp Quick Reaction Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) {
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _messageReactions[msg.id] = emoji;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.reply_outlined),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _groupMsgController.text = 'Replying to "${msg.message}": ';
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_outlined),
+                title: const Text('Copy Text'),
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: msg.message));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Message copied to clipboard!')),
+                  );
+                },
+              ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Edit Message'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showDialog(
+                      context: context,
+                      builder: (dlgCtx) => AlertDialog(
+                        title: const Text('Edit Message'),
+                        content: TextField(
+                          controller: editCtrl,
+                          maxLines: 3,
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dlgCtx),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () async {
+                              Navigator.pop(dlgCtx);
+                              await _communityService.editMessage(
+                                messageId: msg.id,
+                                newText: editCtrl.text.trim(),
+                              );
+                              if (mounted) setState(() {});
+                            },
+                            child: const Text('Save Edit'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_sweep_outlined, color: Colors.orange),
+                title: const Text('Delete for Me'),
+                subtitle: const Text('Remove from your view only'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _hiddenMessageIds.add(msg.id);
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Message deleted for you.')),
+                  );
+                },
+              ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('Delete for Everyone', style: TextStyle(color: Colors.red)),
+                  subtitle: const Text('Permanently delete for all participants'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await _communityService.deleteMessage(messageId: msg.id);
+                    setState(() {
+                      _hiddenMessageIds.add(msg.id);
+                    });
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   List<String> _getQuickTemplates() {
     if (widget.currentUserRole == 'owner') {
       return [
@@ -177,7 +497,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      final messages = snapshot.data ?? [];
+                      final messages = (snapshot.data ?? [])
+                          .where((m) => !_hiddenMessageIds.contains(m.id))
+                          .toList();
 
                       if (messages.isEmpty) {
                         return Center(
@@ -216,7 +538,15 @@ class _ChatScreenState extends State<ChatScreen> {
                           final isMe = msg.senderId == currentUserId ||
                               msg.senderRole == widget.currentUserRole;
 
-                          return _MessageBubble(message: msg, isMe: isMe);
+                          return GestureDetector(
+                            onTap: () => _showMessageOptions(msg),
+                            onLongPress: () => _showMessageOptions(msg),
+                            child: _MessageBubble(
+                              message: msg,
+                              isMe: isMe,
+                              reaction: _messageReactions[msg.id],
+                            ),
+                          );
                         },
                       );
                     },
@@ -260,6 +590,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     child: Row(
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.emoji_emotions_outlined),
+                          onPressed: () => _openStickerDrawer(_primaryMsgController),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _primaryMsgController,
@@ -310,7 +644,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: StreamBuilder<List<CommunityMessage>>(
                     stream: _communityService.getGroupMessagesStream(widget.propertyId),
                     builder: (context, snapshot) {
-                      final messages = snapshot.data ?? [];
+                      final messages = (snapshot.data ?? [])
+                          .where((m) => !_hiddenMessageIds.contains(m.id))
+                          .toList();
 
                       if (messages.isEmpty) {
                         return Center(
@@ -336,36 +672,52 @@ class _ChatScreenState extends State<ChatScreen> {
                         itemBuilder: (context, index) {
                           final msg = messages[index];
                           final isMe = msg.senderId == currentUserId || msg.senderName == currentUserEmail;
+                          final rx = _messageReactions[msg.id];
 
-                          return Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                              decoration: BoxDecoration(
-                                color: isMe ? colors.primary : colors.secondaryContainer,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                                children: [
-                                  if (!isMe)
+                          return GestureDetector(
+                            onTap: () => _showCommunityMessageOptions(msg),
+                            onLongPress: () => _showCommunityMessageOptions(msg),
+                            child: Align(
+                              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                                decoration: BoxDecoration(
+                                  color: isMe ? colors.primary : colors.secondaryContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  children: [
+                                    if (!isMe)
+                                      Text(
+                                        msg.senderName,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: colors.onSecondaryContainer,
+                                        ),
+                                      ),
                                     Text(
-                                      msg.senderName,
+                                      msg.message,
                                       style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: colors.onSecondaryContainer,
+                                        color: isMe ? colors.onPrimary : colors.onSecondaryContainer,
                                       ),
                                     ),
-                                  Text(
-                                    msg.message,
-                                    style: TextStyle(
-                                      color: isMe ? colors.onPrimary : colors.onSecondaryContainer,
-                                    ),
-                                  ),
-                                ],
+                                    if (rx != null) ...[
+                                      const SizedBox(height: 2),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: colors.surfaceContainerHighest,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(rx, style: const TextStyle(fontSize: 12)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -379,6 +731,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.all(8),
                     child: Row(
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.emoji_emotions_outlined),
+                          onPressed: () => _openStickerDrawer(_groupMsgController),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _groupMsgController,
@@ -405,22 +761,91 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Expanded(
                   child: StreamBuilder<List<CommunityMessage>>(
-                    stream: _communityService.getGroupMessagesStream(widget.propertyId),
+                    stream: _communityService.getRoleMessagesStream(
+                      propertyId: widget.propertyId,
+                      role: widget.currentUserRole == 'owner'
+                          ? 'caretaker'
+                          : (widget.currentUserRole == 'tenant' ? 'caretaker' : 'landlord'),
+                    ),
                     builder: (context, snapshot) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.engineering_outlined, size: 56, color: colors.primary),
-                              const SizedBox(height: 12),
-                              Text('Direct Chat with $tab3Label', style: Theme.of(context).textTheme.titleMedium),
-                              const SizedBox(height: 6),
-                              Text('Send on-site repair and maintenance instructions directly to $tab3Label.', textAlign: TextAlign.center),
-                            ],
+                      final messages = (snapshot.data ?? [])
+                          .where((m) => !_hiddenMessageIds.contains(m.id))
+                          .toList();
+
+                      if (messages.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.engineering_outlined, size: 56, color: colors.primary),
+                                const SizedBox(height: 12),
+                                Text('Direct Chat with $tab3Label', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 6),
+                                Text('Send on-site repair and maintenance messages directly to $tab3Label.', textAlign: TextAlign.center),
+                              ],
+                            ),
                           ),
-                        ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final isMe = msg.senderId == currentUserId || msg.senderName == currentUserEmail;
+                          final rx = _messageReactions[msg.id];
+
+                          return GestureDetector(
+                            onTap: () => _showCommunityMessageOptions(msg),
+                            onLongPress: () => _showCommunityMessageOptions(msg),
+                            child: Align(
+                              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                                decoration: BoxDecoration(
+                                  color: isMe ? colors.primary : colors.tertiaryContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  children: [
+                                    if (!isMe)
+                                      Text(
+                                        msg.senderName,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: colors.onTertiaryContainer,
+                                        ),
+                                      ),
+                                    Text(
+                                      msg.message,
+                                      style: TextStyle(
+                                        color: isMe ? colors.onPrimary : colors.onTertiaryContainer,
+                                      ),
+                                    ),
+                                    if (rx != null) ...[
+                                      const SizedBox(height: 2),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: colors.surfaceContainerHighest,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(rx, style: const TextStyle(fontSize: 12)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
@@ -430,6 +855,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.all(8),
                     child: Row(
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.emoji_emotions_outlined),
+                          onPressed: () => _openStickerDrawer(_secondaryMsgController),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _secondaryMsgController,
@@ -460,10 +889,12 @@ class _ChatScreenState extends State<ChatScreen> {
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isMe;
+  final String? reaction;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
+    this.reaction,
   });
 
   @override
@@ -511,6 +942,17 @@ class _MessageBubble extends StatelessWidget {
                 fontSize: 14,
               ),
             ),
+            if (reaction != null) ...[
+              const SizedBox(height: 2),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(reaction!, style: const TextStyle(fontSize: 12)),
+              ),
+            ],
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,

@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:html' as html;
 import 'dart:js_interop';
+
+import 'package:web/web.dart' as web;
 
 @JS('rentReminderHasPushSubscription')
 external JSBoolean _rentReminderHasPushSubscription();
@@ -15,13 +16,14 @@ external void _rentReminderMarkPushSubscriptionSaved();
 
 Future<bool> requestPermission() async {
   try {
-    return await html.Notification.requestPermission() == 'granted';
+    final result = await web.Notification.requestPermission().toDart;
+    return result.toDart == 'granted';
   } catch (_) {
     return false;
   }
 }
 
-bool get isPermissionGranted => html.Notification.permission == 'granted';
+bool get isPermissionGranted => web.Notification.permission == 'granted';
 
 bool get hasPushSubscription => _rentReminderHasPushSubscription().toDart;
 
@@ -39,5 +41,5 @@ void markPushSubscriptionSaved() {
 
 Future<void> show(String title, String body) async {
   if (!isPermissionGranted) return;
-  html.Notification(title, body: body);
+  web.Notification(title, web.NotificationOptions(body: body));
 }
