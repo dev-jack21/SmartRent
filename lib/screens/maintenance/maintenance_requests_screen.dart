@@ -99,13 +99,7 @@ class _MaintenanceRequestsScreenState extends State<MaintenanceRequestsScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Could not load maintenance requests: ${error.message}';
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Something went wrong: $error';
+        _errorMessage = 'Could not load maintenance requests: $error';
       });
     }
   }

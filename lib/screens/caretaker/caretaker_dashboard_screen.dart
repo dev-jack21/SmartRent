@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../ai/ai_assistant_screen.dart';
+import '../analytics/financial_analytics_screen.dart';
 import '../announcements/announcements_screen.dart';
+import '../emergency/emergency_alert_screen.dart';
+import '../expenses/expense_tracker_screen.dart';
 import '../inspection/property_inspection_screen.dart';
 import '../maintenance/maintenance_requests_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../tenant/tenant_directory_screen.dart';
-import '../utilities/utility_billing_screen.dart';
 import 'key_management_screen.dart';
 import 'parcel_logger_screen.dart';
 import 'sanitation_schedule_screen.dart';
@@ -22,9 +25,9 @@ class CaretakerDashboardScreen extends StatefulWidget {
 class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  bool _isLoading = true;
   List<Map<String, dynamic>> _properties = [];
   List<Map<String, dynamic>> _maintenanceRequests = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -61,6 +64,25 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
   int get _openMaintenanceCount =>
       _maintenanceRequests.where((r) => r['status'] != 'Completed').length;
 
+  Future<void> _updateTicketStatus(Map<String, dynamic> ticket, String newStatus) async {
+    try {
+      await _supabase
+          .from('maintenance_requests')
+          .update({'status': newStatus})
+          .eq('id', ticket['id']);
+      await _loadCaretakerData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ticket status updated to $newStatus!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update status: $e')),
+      );
+    }
+  }
+
   void _openPropertyFeature(void Function(Map<String, dynamic> property) onSelect) {
     if (_properties.isEmpty) {
       final defaultBuilding = {
@@ -80,23 +102,25 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
 
     showDialog(
       context: context,
-      builder: (dialogContext) {
+      builder: (ctx) {
         return AlertDialog(
-          title: const Text('Select Building / Unit'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: _properties.map((p) {
+          title: const Text('Select Property / Unit'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _properties.length,
+              itemBuilder: (context, index) {
+                final prop = _properties[index];
                 return ListTile(
-                  leading: const Icon(Icons.home_outlined),
-                  title: Text(p['name']?.toString() ?? 'Building'),
-                  subtitle: Text('Unit: ${p['unit_number'] ?? 'All'} | Tenant: ${p['tenant_name'] ?? 'Vacant'}'),
+                  title: Text(prop['name']?.toString() ?? 'Property'),
+                  subtitle: Text('Unit: ${prop['unit_number'] ?? 'N/A'}'),
                   onTap: () {
-                    Navigator.pop(dialogContext);
-                    onSelect(p);
+                    Navigator.pop(ctx);
+                    onSelect(prop);
                   },
                 );
-              }).toList(),
+              },
             ),
           ),
         );
@@ -219,15 +243,73 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
                     childAspectRatio: 1.2,
                     children: [
                       _CaretakerTile(
-                        icon: Icons.handyman_outlined,
-                        title: 'Maintenance Tickets',
-                        badge: '$_openMaintenanceCount Pending',
-                        color: Colors.orange[800]!,
+                        icon: Icons.build_outlined,
+                        title: 'Maintenance Requests',
+                        badge: '$_openMaintenanceCount Open',
+                        color: colors.error,
                         onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => const MaintenanceRequestsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _CaretakerTile(
+                        icon: Icons.report_problem_outlined,
+                        title: 'Building Emergency Alert',
+                        badge: 'Panic System',
+                        color: Colors.red[800]!,
+                        onTap: () {
+                          _openPropertyFeature((p) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => EmergencyAlertScreen(property: p),
+                              ),
+                            );
+                          });
+                        },
+                      ),
+                      _CaretakerTile(
+                        icon: Icons.smart_toy_outlined,
+                        title: 'AI Assistant',
+                        badge: 'Smart Manager',
+                        color: Colors.deepPurple[800]!,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AiAssistantScreen(properties: _properties),
+                            ),
+                          );
+                        },
+                      ),
+                      _CaretakerTile(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Property Expenses',
+                        badge: 'Log Repair Expenses',
+                        color: Colors.brown[800]!,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ExpenseTrackerScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _CaretakerTile(
+                        icon: Icons.analytics_outlined,
+                        title: 'Cashflow & P&L',
+                        badge: 'Financial Analytics',
+                        color: Colors.green[800]!,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FinancialAnalyticsScreen(),
                             ),
                           );
                         },
@@ -257,42 +339,7 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => TenantDirectoryScreen(
-                                properties: _properties,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      _CaretakerTile(
-                        icon: Icons.campaign_outlined,
-                        title: 'Notice Board',
-                        badge: 'Announcements',
-                        color: Colors.teal[800]!,
-                        onTap: () {
-                          _openPropertyFeature((p) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AnnouncementsScreen(
-                                  property: p,
-                                  userRole: 'owner',
-                                ),
-                              ),
-                            );
-                          });
-                        },
-                      ),
-                      _CaretakerTile(
-                        icon: Icons.bolt_outlined,
-                        title: 'Meter Readings',
-                        badge: 'Utility Bills',
-                        color: Colors.green[800]!,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const UtilityBillingScreen(),
+                              builder: (_) => TenantDirectoryScreen(properties: _properties),
                             ),
                           );
                         },
@@ -300,7 +347,7 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
                       _CaretakerTile(
                         icon: Icons.key_outlined,
                         title: 'Key Inventory',
-                        badge: 'Checkout Log',
+                        badge: 'Keys & Badges',
                         color: Colors.amber[900]!,
                         onTap: () {
                           _openPropertyFeature((p) {
@@ -314,10 +361,24 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
                         },
                       ),
                       _CaretakerTile(
-                        icon: Icons.inventory_2_outlined,
-                        title: 'Parcel Deliveries',
-                        badge: 'Gate Log',
-                        color: Colors.brown[700]!,
+                        icon: Icons.connect_without_contact_outlined,
+                        title: 'Vendor Directory',
+                        badge: 'On-Call Pros',
+                        color: Colors.teal[800]!,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const VendorDirectoryScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _CaretakerTile(
+                        icon: Icons.local_post_office_outlined,
+                        title: 'Gate Parcel Log',
+                        badge: 'Deliveries',
+                        color: Colors.deepOrange[800]!,
                         onTap: () {
                           _openPropertyFeature((p) {
                             Navigator.push(
@@ -331,9 +392,9 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
                       ),
                       _CaretakerTile(
                         icon: Icons.cleaning_services_outlined,
-                        title: 'Sanitation & Cleaning',
-                        badge: 'Routine',
-                        color: Colors.cyan[800]!,
+                        title: 'Sanitation Routine',
+                        badge: 'Cleaning Log',
+                        color: Colors.lightGreen[800]!,
                         onTap: () {
                           Navigator.push(
                             context,
@@ -344,17 +405,22 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
                         },
                       ),
                       _CaretakerTile(
-                        icon: Icons.handyman_outlined,
-                        title: 'On-Call Vendors',
-                        badge: 'Contractors',
-                        color: Colors.deepOrange[800]!,
+                        icon: Icons.campaign_outlined,
+                        title: 'Notice Board',
+                        badge: 'Announcements',
+                        color: Colors.indigo[800]!,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const VendorDirectoryScreen(),
-                            ),
-                          );
+                          _openPropertyFeature((p) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AnnouncementsScreen(
+                                  property: p,
+                                  userRole: 'caretaker',
+                                ),
+                              ),
+                            );
+                          });
                         },
                       ),
                     ],
@@ -362,37 +428,72 @@ class _CaretakerDashboardScreenState extends State<CaretakerDashboardScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Recent Properties Quick Action List
-                  Text(
-                    'Building Units List',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Active Maintenance Tickets',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MaintenanceRequestsScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text('View All'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
 
-                  ..._properties.map((property) {
-                    final name = property['name']?.toString() ?? 'Building Unit';
-                    final tenant = property['tenant_name']?.toString().trim() ?? 'Vacant';
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const CircleAvatar(child: Icon(Icons.home_outlined)),
-                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Tenant: $tenant'),
-                        trailing: OutlinedButton(
-                          child: const Text('Inspect'),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => PropertyInspectionScreen(property: property),
-                              ),
-                            );
-                          },
+                  if (_maintenanceRequests.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(
+                          child: Text('No maintenance tickets reported yet.'),
                         ),
                       ),
-                    );
-                  }),
+                    )
+                  else
+                    ..._maintenanceRequests.map((req) {
+                      final status = req['status']?.toString() ?? 'Open';
+                      final priority = req['priority']?.toString() ?? 'Medium';
+                      final title = req['title']?.toString() ?? 'Maintenance Issue';
+                      final desc = req['description']?.toString() ?? '';
+
+                      Color pColor = Colors.orange;
+                      if (priority == 'High') pColor = Colors.red;
+                      if (priority == 'Low') pColor = Colors.blue;
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: pColor.withValues(alpha: 0.2),
+                            child: Icon(Icons.build_outlined, color: pColor, size: 20),
+                          ),
+                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(desc.isNotEmpty ? desc : 'Priority: $priority'),
+                          trailing: DropdownButton<String>(
+                            value: ['Open', 'In Progress', 'Completed'].contains(status) ? status : 'Open',
+                            underline: const SizedBox(),
+                            items: ['Open', 'In Progress', 'Completed'].map((s) {
+                              return DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 12)));
+                            }).toList(),
+                            onChanged: (newVal) {
+                              if (newVal != null) _updateTicketStatus(req, newVal);
+                            },
+                          ),
+                        ),
+                      );
+                    }),
+
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -422,15 +523,18 @@ class _MetricBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12)),
-          const SizedBox(height: 4),
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: color,
             ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -456,26 +560,29 @@ class _CaretakerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 2,
+      elevation: 1,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 32, color: color),
+              CircleAvatar(
+                backgroundColor: color.withValues(alpha: 0.15),
+                child: Icon(icon, color: color),
+              ),
               const SizedBox(height: 8),
               Text(
                 title,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 badge,
-                style: TextStyle(fontSize: 11, color: color),
+                style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
               ),
             ],
           ),

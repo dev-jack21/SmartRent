@@ -8,7 +8,7 @@ class AnnouncementsScreen extends StatefulWidget {
   const AnnouncementsScreen({
     super.key,
     required this.property,
-    required this.userRole,
+    this.userRole = 'owner',
   });
 
   @override
