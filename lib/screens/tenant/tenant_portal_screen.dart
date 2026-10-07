@@ -119,11 +119,6 @@ class _TenantPortalScreenState extends State<TenantPortalScreen> {
             },
             icon: const Icon(Icons.account_circle_outlined),
           ),
-          IconButton(
-            tooltip: 'Log out',
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-          ),
         ],
       ),
       body: RefreshIndicator(
