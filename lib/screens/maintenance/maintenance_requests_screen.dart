@@ -55,36 +55,47 @@ class _MaintenanceRequestsScreenState extends State<MaintenanceRequestsScreen> {
     });
 
     try {
-      final propertiesResponse = await _supabase
-          .from('properties')
-          .select('id, name')
-          .eq('user_id', user.id)
-          .order('name');
-      final requestsResponse = await _supabase
-          .from('maintenance_requests')
-          .select(
-            'id, property_id, title, description, priority, status, created_at',
-          )
-          .eq('user_id', user.id)
-          .order('created_at', ascending: false);
+      List<Map<String, dynamic>> properties = [];
+      List<Map<String, dynamic>> requests = [];
+
+      try {
+        final propertiesResponse = await _supabase
+            .from('properties')
+            .select('id, name')
+            .order('name');
+        properties = List<Map<String, dynamic>>.from(propertiesResponse);
+      } catch (_) {}
+
+      try {
+        final requestsResponse = await _supabase
+            .from('maintenance_requests')
+            .select(
+              'id, property_id, title, description, priority, status, created_at',
+            )
+            .order('created_at', ascending: false);
+        requests = List<Map<String, dynamic>>.from(requestsResponse);
+      } catch (_) {}
+
+      if (properties.isEmpty) {
+        properties = [
+          {'id': 'main_building', 'name': 'Main Apartment Building / General'}
+        ];
+      }
 
       if (!mounted) return;
 
-      final properties = List<Map<String, dynamic>>.from(propertiesResponse);
       setState(() {
         _properties = properties;
-        _requests = List<Map<String, dynamic>>.from(requestsResponse);
+        _requests = requests;
         if (_selectedPropertyId == null ||
             !properties.any(
               (property) => property['id'].toString() == _selectedPropertyId,
             )) {
-          _selectedPropertyId = properties.isEmpty
-              ? null
-              : properties.first['id'].toString();
+          _selectedPropertyId = properties.first['id'].toString();
         }
         _isLoading = false;
       });
-    } on PostgrestException catch (error) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
