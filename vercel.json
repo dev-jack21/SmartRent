@@ -1,0 +1,5 @@
+{
+  "framework": null,
+  "buildCommand": "git clone --depth 1 --branch 3.47.6 https://github.com/flutter/flutter.git /tmp/flutter && if [ -n \"$WEB_PUSH_VAPID_PUBLIC_KEY\" ]; then /tmp/flutter/bin/flutter build web --release --dart-define=WEB_PUSH_VAPID_PUBLIC_KEY=\"$WEB_PUSH_VAPID_PUBLIC_KEY\"; else /tmp/flutter/bin/flutter build web --release; fi",
+  "outputDirectory": "build/web"
+}

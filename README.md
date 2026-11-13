@@ -24,6 +24,31 @@ accounts created before the migration must have their profile role set to
 The document migration creates a private Storage bucket. Do not change it to a
 public bucket: the app uses authenticated, short-lived download links.
 
+## Deploying the web app to Vercel
+
+The Vercel configuration builds the Flutter web app with Flutter 3.47.6 and
+publishes `build/web`. The Flutter SDK is downloaded during each Vercel build.
+
+1. Import the `dev-jack21/SmartRent` GitHub repository into Vercel. This Flutter
+   app is a separate repository from the parent workspace repository.
+2. Keep the project root at the repository root and use the **Other** framework
+   preset. The checked-in `vercel.json` supplies the build command and output
+   directory.
+3. If scheduled browser push is enabled, add `WEB_PUSH_VAPID_PUBLIC_KEY` as a
+   Vercel environment variable for Production and Preview. It must match the
+   VAPID public/private key pair configured as Supabase Edge Function secrets.
+   The build command uses this variable when present; otherwise, the app's
+   built-in public key is used.
+4. In Supabase **Authentication → URL Configuration**, set the production
+   Vercel URL as the Site URL and add the Vercel deployment URL(s) to the
+   redirect URL allowlist.
+5. Deploy from Vercel. Pushes to the connected production branch will trigger
+   production deployments; other branches can deploy previews.
+
+Vercel hosts only the Flutter web client. Apply database migrations and deploy
+Supabase Edge Functions separately. Never put VAPID private keys or other
+server secrets in Vercel's client build environment.
+
 ## Automatic rent reminders
 
 The app supports device-local reminders and scheduled browser push for the
